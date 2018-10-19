@@ -22,7 +22,7 @@ browser.runtime.onMessageExternal.addListener((aMessage, aSender) => {
                 case 'ready':
                     registerToTST(); // passive registration for secondary (or after) startup
                     console.log("TST registered");
-                    break;
+                    return Promise.resolve(true);
                 case 'try-move-focus-from-closing-current-tab':
                     console.log("current tab closing");
                     let focusChanged = focusPrecedingChildTab(aMessage);
