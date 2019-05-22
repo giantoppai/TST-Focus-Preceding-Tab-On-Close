@@ -164,12 +164,13 @@ async function focusPrecedingChildTab(aMessage) {
         }
 
         // Get tab info:
-        let cachedWindow = getCachedWindow(closedTab.windowId);
+        let realClosedTab = await browser.tabs.get(closedTab.id);
+        let cachedWindow = getCachedWindow(realClosedTab.windowId);
         await cachedWindow.work;
         let closedNativeTab = cachedWindow.cache.filter(tab => tab.id === closedTab.id);
 
         activeNativeTab = await browser.tabs.query({
-            windowId: closedTab.windowId,
+            windowId: realClosedTab.windowId,
             active: true,
         });
         activeNativeTab = activeNativeTab[0];
@@ -194,9 +195,9 @@ async function focusPrecedingChildTab(aMessage) {
                 throw new Error('No tab at requested index.');
             }
         }
-        var precedingNativeTab = await getPreviousTab(closedTab.windowId, index);
+        var precedingNativeTab = await getPreviousTab(realClosedTab.windowId, index);
         if (precedingNativeTab.id === closedTab.id) {
-            precedingNativeTab = await getPreviousTab(closedTab.windowId, --index);
+            precedingNativeTab = await getPreviousTab(realClosedTab.windowId, --index);
         }
 
         if (closedTab.ancestorTabIds.includes(activeNativeTab.id)) {
