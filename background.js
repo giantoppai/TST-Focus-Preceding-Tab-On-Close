@@ -3,16 +3,13 @@ const kTST_ID = 'treestyletab@piro.sakura.ne.jp';
 function delay(timeInMilliseconds) {
     return new Promise((resolve) => setTimeout(resolve, timeInMilliseconds));
 }
-function deepCopy(data) {
-    return JSON.parse(JSON.stringify(data));
-}
 
 async function registerToTST() {
     try {
         const success = await browser.runtime.sendMessage(kTST_ID, {
             type: 'register-self',
             name: self.id,
-            listeningTypes: ['ready', 'try-move-focus-from-closing-current-tab'],
+            listeningTypes: ['ready', 'try-move-focus-from-closing-current-tab', 'tree-attached', 'tree-detached'],
         });
         if (success) console.log("TST registered");
         return true;
@@ -43,10 +40,48 @@ browser.runtime.onMessageExternal.addListener(function (aMessage, aSender) {
                     focusChanged.then((value) => console.log('Blocked TST Default Tab Focus: ' + value));
                     return Promise.resolve(focusChanged);
                 }
+                case 'tree-attached': {
+                    const { tab, parent } = aMessage;
+                    handleTreeStructureChange([tab, parent]);
+                } break;
+                case 'tree-detached': {
+                    const { tab, oldParent } = aMessage;
+                    handleTreeStructureChange([tab, oldParent]);
+                } break;
             }
             break;
     }
 });
+
+/**
+ * If the closed tab has child tabs then we want those to be selected instead of the preceding tab. Therefore we should update the tree data for the active tab if it is changed.
+ * 
+ * Example use case where this has an affect:
+ * 1. Install [Move unloaded tabs for Tree Style Tab](https://addons.mozilla.org/firefox/addon/move-unloaded-tabs-for-tst/).
+ * 2. Activate a tab without children.
+ * 3. Make the tab after the current tab a child of the current tab. (If the child tab is moved then the Firefox move event is triggered which will update cached info anyway)
+ * 4. Close current tab.
+ * 
+ * Result without this function: The preceding tab is activated.
+ * Result with this function: The child tab is activated.
+ *
+ * @param {Object[]} tabs Tabs that has changed tree structure.
+ */
+function handleTreeStructureChange(tabs) {
+    if (isTstTryFocusApiEnabled) return;    // Tree data is provided from event message.
+    if (!Array.isArray(tabs)) {
+        tabs = [tabs];
+    }
+    const [aTab] = tabs;
+    const windowCache = getCachedWindow(aTab.windowId);
+    if (windowCache) {
+        for (const tab of tabs) {
+            if (windowCache.lastActiveTab.id === tab.id) {
+                cacheActiveTab(aTab.windowId);
+            }
+        }
+    }
+}
 
 /**
  * @typedef {Object} CachedWindowInfo
@@ -54,6 +89,7 @@ browser.runtime.onMessageExternal.addListener(function (aMessage, aSender) {
  * @property {Object} Info.info The `windows.Window` object with info about the windows properties.
  * @property {Array} Info.cache `tabs.Tab` objects for cached activate tabs in this window. There will only be one `tabs.Tab` object per tab id.
  * @property {number} Info.indexOfLastAddedTab The index in the cache of the tab that was most recently added.
+ * @property {Object} Info.lastActiveTab The `tabs.Tab` object that was most recently cached as active.
  * @property {Promise<void>} Info.work A promise for the previous cache request. Used to ensure that the cache is updated in the right order.
  */
 null;
@@ -86,7 +122,7 @@ async function cacheActiveTab(windowId, removedTabId = null, addedTabId = null) 
                 try {
                     activeTab = await browser.tabs.get(addedTabId);
                 } catch (error) {
-                    console.error('Failed to get info for the tab that should be active.\nError:\n', error)
+                    console.error('Failed to get info for the tab that should be active.\nError:\n', error);
                 }
             }
             if (!activeTab) {
@@ -127,6 +163,8 @@ async function cacheActiveTab(windowId, removedTabId = null, addedTabId = null) 
                 await previousWork;
             } catch (error) { }
 
+
+            window.lastActiveTab = activeTab;
 
             if (!window.indexOfLastAddedTab) {
                 window.indexOfLastAddedTab = 0;
@@ -173,7 +211,7 @@ async function checkIfTabWasClosed(windowId, tabId) {
             await windowCache.work;
             const tabs = getCachedWindowTabInChronologicalOrder(windowCache);
             for (const lastActiveTab of tabs) {
-                console.log('Check tab: ', lastActiveTab.id);
+                // console.log('Check tab: ', lastActiveTab.id);
 
                 if (lastActiveTab.id === tabId) {
                     focusPrecedingChildTab(lastActiveTab);
@@ -183,12 +221,12 @@ async function checkIfTabWasClosed(windowId, tabId) {
                 const timeSinceCached = now - lastActiveTab.timeWhenTabWasCached;
                 if (timeSinceCached > 500) {
                     // This tab's active status wasn't changed recently => the previous cached active tab hasn't been active for at least that time => don't check any more cached tabs.
-                    console.log('tab wasn\'t active for: ', timeSinceCached, '\nTabId: ', lastActiveTab.id);
+                    // console.log('tab wasn\'t active for: ', timeSinceCached, '\nTabId: ', lastActiveTab.id);
                     break;
                 }
             }
         }
-        console.log('Tab was closed but it wasn\'t active.\nTabId ', tabId, '\nWindowId: ', windowId, '\nwindowCache: ', JSON.parse(JSON.stringify(windowCache)));
+        // console.log('Tab was closed but it wasn\'t active.\nTabId ', tabId, '\nWindowId: ', windowId, '\nwindowCache: ', JSON.parse(JSON.stringify(windowCache)));
     }
 }
 
