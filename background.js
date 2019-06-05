@@ -27,6 +27,7 @@ browser.runtime.onMessageExternal.addListener(function (aMessage, aSender) {
         case kTST_ID:
             switch (aMessage.type) {
                 case 'ready': {
+                    isTstTryFocusApiEnabled = false;    // TST might have been updated.
                     registerToTST(); // passive registration for secondary (or after) startup
                     console.log("TST registered");
                     return Promise.resolve(true);
@@ -154,7 +155,7 @@ async function cacheActiveTab(windowId, removedTabId = null, addedTabId = null) 
                 } catch (error) {
                     console.error('Failed to cache Tree Style Tab info for active tab.\nError', error);
                 }
-                if (tstTabInfo) Object.assign(activeTab, tstTabInfo);
+                if (tstTabInfo) activeTab.tstTab = tstTabInfo;
 
                 activeTab.timeWhenTabWasCached = Date.now();
             }
@@ -214,7 +215,7 @@ async function checkIfTabWasClosed(windowId, tabId) {
                 // console.log('Check tab: ', lastActiveTab.id);
 
                 if (lastActiveTab.id === tabId) {
-                    focusPrecedingChildTab(lastActiveTab);
+                    focusPrecedingChildTab(lastActiveTab.tstTab);
                     return;
                 }
 
@@ -276,7 +277,7 @@ browser.windows.getAll().then(value => {
 
 async function focusPrecedingChildTab(closedTab) {
     try {
-        if (closedTab.children && closedTab.children.length > 0) {
+        if (closedTab.children.length > 0) {
             console.log('Closed tab has children so focus on them.');
             return false;
         }
