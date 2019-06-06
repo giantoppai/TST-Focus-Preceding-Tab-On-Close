@@ -231,7 +231,7 @@ async function checkIfTabWasClosed(windowId, tabId) {
                 }
 
                 const timeSinceTabBecameActive = now - lastActiveTab.timeWhenTabLastBecameActive;
-                if (timeSinceTabBecameActive > 250) {
+                if (timeSinceTabBecameActive > 500) {
                     // This tab's didn't become active recently => the previous cached active tab hasn't been active for at least that time => don't check any more cached tabs.
                     // console.log('tab wasn\'t active for: ', timeSinceCached, '\nTabId: ', lastActiveTab.id);
                     break;
