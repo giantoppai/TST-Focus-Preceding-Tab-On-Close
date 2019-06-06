@@ -2,7 +2,7 @@
 
     "manifest_version": 2,
     "name": "TST Focus Preceding Tab On Close",
-    "version": "1.1.0",
+    "version": "1.1.1",
     "description": "This add-on requires Tree Style Tab. It changes Tree Style Tab's behavior by focusing the preceding child tab after closing the current one.",
 
     "background": {
