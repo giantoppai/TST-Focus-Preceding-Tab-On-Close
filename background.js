@@ -108,7 +108,7 @@ function getCachedWindow(windowId) {
 }
 function getCachedWindowTabInChronologicalOrder(windowCache) {
     const tabs = windowCache.cache.slice();
-    tabs.sort((a, b) => b.timeWhenTabWasCached - a.timeWhenTabWasCached);
+    tabs.sort((a, b) => b.timeWhenTabLastBecameActive - a.timeWhenTabLastBecameActive);
     return tabs;
 }
 async function cacheActiveTab(windowId, removedTabId = null, addedTabId = null) {
@@ -157,15 +157,13 @@ async function cacheActiveTab(windowId, removedTabId = null, addedTabId = null) 
                 }
                 if (tstTabInfo) activeTab.tstTab = tstTabInfo;
 
-                activeTab.timeWhenTabWasCached = Date.now();
+                activeTab.timeWhenTabLastBecameActive = Date.now();
             }
 
             try {
                 await previousWork;
             } catch (error) { }
 
-
-            window.lastActiveTab = activeTab;
 
             if (!window.indexOfLastAddedTab) {
                 window.indexOfLastAddedTab = 0;
@@ -185,9 +183,22 @@ async function cacheActiveTab(windowId, removedTabId = null, addedTabId = null) 
                     window.cache.splice(window.indexOfLastAddedTab, window.cache.length > window.indexOfLastAddedTab ? 1 : 0, activeTab);
                 } else {
                     // console.log('cached tab updated');
+                    if (!isTstTryFocusApiEnabled) {
+                        const previousCachedTab = window.cache[tabIndex];
+                        if (window.lastActiveTab.id === activeTab.id) {
+                            // Only update `timeWhenTabLastBecameActive` if the active tab was changed.                            
+                            activeTab.timeWhenTabLastBecameActive = previousCachedTab.timeWhenTabLastBecameActive;
+                        }
+                        if (!activeTab.tstTab) {
+                            activeTab.tstTab = previousCachedTab.tstTab;
+                        }
+                    }
                     window.cache[tabIndex] = activeTab;
                 }
             }
+
+
+            window.lastActiveTab = activeTab;
         } catch (error) {
             console.error('Failed to cache active tab:\n' + error);
         }
@@ -219,9 +230,9 @@ async function checkIfTabWasClosed(windowId, tabId) {
                     return;
                 }
 
-                const timeSinceCached = now - lastActiveTab.timeWhenTabWasCached;
-                if (timeSinceCached > 500) {
-                    // This tab's active status wasn't changed recently => the previous cached active tab hasn't been active for at least that time => don't check any more cached tabs.
+                const timeSinceTabBecameActive = now - lastActiveTab.timeWhenTabLastBecameActive;
+                if (timeSinceTabBecameActive > 250) {
+                    // This tab's didn't become active recently => the previous cached active tab hasn't been active for at least that time => don't check any more cached tabs.
                     // console.log('tab wasn\'t active for: ', timeSinceCached, '\nTabId: ', lastActiveTab.id);
                     break;
                 }
@@ -277,6 +288,8 @@ browser.windows.getAll().then(value => {
 
 async function focusPrecedingChildTab(closedTab) {
     try {
+        if (!closedTab) return;
+
         if (closedTab.children.length > 0) {
             console.log('Closed tab has children so focus on them.');
             return false;
